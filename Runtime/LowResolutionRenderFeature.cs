@@ -71,6 +71,8 @@ namespace LowResolution
                 this.depthRT = depthRT;
             }
 
+            readonly int _ScaledScreenParams = Shader.PropertyToID("_ScaledScreenParams");
+
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
                 // Lazy creation : as in Constructor Shader.Find() can return null;
@@ -112,8 +114,17 @@ namespace LowResolution
 
                     var param = new RendererListParams(renderingData.cullResults, drawSettings, this.filteringSettings);
                     var rl = context.CreateRendererList(ref param);
-                    cmd.DrawRendererList(rl);
 
+                    // Handle ScaledScreenParams
+                    Vector4 scaledScreenParams = Shader.GetGlobalVector(_ScaledScreenParams);
+                    scaledScreenParams.x = renderingData.cameraData.scaledWidth / (int)settings.downsampling;
+                    scaledScreenParams.y = renderingData.cameraData.scaledHeight / (int)settings.downsampling;
+                    cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
+                    cmd.DrawRendererList(rl);
+                    // Restore State
+                    scaledScreenParams.x = renderingData.cameraData.scaledWidth;
+                    scaledScreenParams.y = renderingData.cameraData.scaledHeight;
+                    cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
 
                     if (isGameCamera)
                     {
