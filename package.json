@@ -1,0 +1,15 @@
+{
+  "name": "net.peeweek.urp-lowresolutionrenderpass",
+  "displayName": "Universal RP : Low Resolution RenderPass",
+  "version": "1.0.0",
+  "unity": "2022.3",
+  "description": "URP ScriptableRendererPass that enables rendering of transparent objects at a lower resolution. (Forked from yugofujioka's BlendedBufferForURP)",
+  "hideInEditor": false,
+  "author": {
+    "name": "PeeWeeK.NET",
+    "url": "https://github.com/peeweek/"
+  },
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "14.0.0"
+  }
+}
