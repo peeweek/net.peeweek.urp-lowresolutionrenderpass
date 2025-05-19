@@ -11,8 +11,13 @@ namespace LowResolution
     /// </summary>
     public class LowResolutionRenderFeature : ScriptableRendererFeature
     {
-        const string RENDER_TARGET_NAME = "_LowResolutionTransparent";
-        
+        public static bool Enabled
+        {
+            get { return PlayerPrefs.GetInt("LowResolutionRenderFeature.Enabled", 1) == 1; }
+            set { PlayerPrefs.SetInt("LowResolutionRenderFeature.Enabled", value ? 1 : 0); }
+        }
+
+        const string RENDER_TARGET_NAME = "_LowResolutionTransparent"; 
         public enum DOWN_SAMPLING
         {
             Half = 2,
@@ -39,6 +44,7 @@ namespace LowResolution
             {
                 new ShaderTagId("SRPDefaultUnlit"),  // For Unlit
                 new ShaderTagId("UniversalForward"), // For Lit Opaque
+                new ShaderTagId("UniversalForwardOnly"), // For Lit Opaque
             };
 
             RTHandle colorRT, depthRT;
@@ -90,7 +96,7 @@ namespace LowResolution
                 var cmd = CommandBufferPool.Get();
                 using (new ProfilingScope(cmd, this.profilingSampler))
                 {
-                    if (isGameCamera)
+                    if (isGameCamera && Enabled)
                     {
                         cmd.SetRenderTarget(this.colorRT, this.depthRT);
                         cmd.ClearRenderTarget(true, true, Color.clear);
@@ -115,18 +121,27 @@ namespace LowResolution
                     var param = new RendererListParams(renderingData.cullResults, drawSettings, this.filteringSettings);
                     var rl = context.CreateRendererList(ref param);
 
-                    // Handle ScaledScreenParams
-                    Vector4 scaledScreenParams = Shader.GetGlobalVector(_ScaledScreenParams);
-                    scaledScreenParams.x = renderingData.cameraData.scaledWidth / (int)settings.downsampling;
-                    scaledScreenParams.y = renderingData.cameraData.scaledHeight / (int)settings.downsampling;
-                    cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
-                    cmd.DrawRendererList(rl);
-                    // Restore State
-                    scaledScreenParams.x = renderingData.cameraData.scaledWidth;
-                    scaledScreenParams.y = renderingData.cameraData.scaledHeight;
-                    cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
 
-                    if (isGameCamera)
+                    if (isGameCamera && Enabled)
+                    {
+                        // Handle ScaledScreenParams
+                        Vector4 scaledScreenParams = Shader.GetGlobalVector(_ScaledScreenParams);
+                        scaledScreenParams.x = renderingData.cameraData.scaledWidth / (int)settings.downsampling;
+                        scaledScreenParams.y = renderingData.cameraData.scaledHeight / (int)settings.downsampling;
+                        cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
+                        cmd.DrawRendererList(rl);
+                        // Restore State
+                        scaledScreenParams.x = renderingData.cameraData.scaledWidth;
+                        scaledScreenParams.y = renderingData.cameraData.scaledHeight;
+                        cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
+                    }
+                    else
+                    {
+                        cmd.DrawRendererList(rl);
+                    }
+
+
+                    if (isGameCamera && Enabled)
                     {
                         // Blit Low Resolution Buffer -> CameraColorAttachment
                         // Blitter.BlitCameraTexture(cmd,
