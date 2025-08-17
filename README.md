@@ -10,8 +10,8 @@ Modified and Packaged for convenience.
 
 ## TODOs
 
-[ ] Port to Unity 6 : Rewrite to use Rendergraph
-[ ] Better Handling of fullscreen blit to avoid ringing around depth
+- [ ] Port to Unity 6 : Rewrite to use Rendergraph
+- [ ] Better Handling of fullscreen blit to avoid ringing around depth
 
 ## License
 Licensed under the Unity Companion License for Unity-dependent projects--see Unity Companion License.
