@@ -8,6 +8,11 @@ Modified and Packaged for convenience.
 - Disable LayerMask you want to use on LowResolution from Filtering
 - Configure settings
 
+## TODOs
+
+[ ] Port to Unity 6 : Rewrite to use Rendergraph
+[ ] Better Handling of fullscreen blit to avoid ringing around depth
+
 ## License
 Licensed under the Unity Companion License for Unity-dependent projects--see Unity Companion License.
 
