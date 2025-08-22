@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
-using System.Collections.Generic;
 using UnityEngine.Experimental.Rendering;
+using System.Collections.Generic;
 
 namespace LowResolution
 {
@@ -17,7 +17,7 @@ namespace LowResolution
             set { PlayerPrefs.SetInt("LowResolutionRenderFeature.Enabled", value ? 1 : 0); }
         }
 
-        const string RENDER_TARGET_NAME = "_LowResolutionTransparent"; 
+        const string RENDER_TARGET_NAME = "_LowResolutionTransparent";
         public enum DOWN_SAMPLING
         {
             Half = 2,
@@ -79,10 +79,11 @@ namespace LowResolution
 
             readonly int _ScaledScreenParams = Shader.PropertyToID("_ScaledScreenParams");
 
+            [System.Obsolete("TODO", false)]
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
                 // Lazy creation : as in Constructor Shader.Find() can return null;
-                if(this.copyDepth == null) this.copyDepth = new Material(Shader.Find("LowResolution/CopyDownsampleDepth"));
+                if (this.copyDepth == null) this.copyDepth = new Material(Shader.Find("LowResolution/CopyDownsampleDepth"));
                 if (this.blitMaterial == null) this.blitMaterial = new Material(Shader.Find("LowResolution/CompositeLowResolution"));
 
                 if (this.settings.BlurComposite)
@@ -92,11 +93,14 @@ namespace LowResolution
 
                 this.filteringSettings.renderQueueRange = GetRenderQueueRange(this.settings.ApplyToOpaque);
 
-                var isGameCamera = renderingData.cameraData.cameraType == CameraType.Game;
+                var isSupportedCamera = (renderingData.cameraData.cameraType == CameraType.Game && renderingData.cameraData.camera == Camera.main)
+                                        || renderingData.cameraData.cameraType == CameraType.SceneView;
+                                    
+                                    
                 var cmd = CommandBufferPool.Get();
                 using (new ProfilingScope(cmd, this.profilingSampler))
                 {
-                    if (isGameCamera && Enabled)
+                    if (isSupportedCamera && Enabled)
                     {
                         cmd.SetRenderTarget(this.colorRT, this.depthRT);
                         cmd.ClearRenderTarget(true, true, Color.clear);
@@ -111,28 +115,34 @@ namespace LowResolution
                         cmd.SetRenderTarget(renderingData.cameraData.renderer.cameraColorTargetHandle,
                                             renderingData.cameraData.renderer.cameraDepthTargetHandle);
                     }
-                    
+
                     // Rendering by LayerMask(e.g. any VFX)
                     var drawSettings =
                         CreateDrawingSettings(SHADER_TAG_ID, ref renderingData, SortingCriteria.CommonTransparent);
                     drawSettings.perObjectData = PerObjectData.None;
 
-
                     var param = new RendererListParams(renderingData.cullResults, drawSettings, this.filteringSettings);
                     var rl = context.CreateRendererList(ref param);
 
-
-                    if (isGameCamera && Enabled)
+                    ///////////////////////////////////////////////////////////////////////////
+                    // STAGE 1 : Draw renderers inside the low resolution render buffer
+                    ///////////////////////////////////////////////////////////////////////////
+                    if (isSupportedCamera && Enabled)
                     {
+                        var cameraData = renderingData.cameraData;
+                        int currentScaledWidth = Mathf.Max(1, (int)(cameraData.camera.pixelWidth * cameraData.renderScale));
+                        int currentScaledHeight = Mathf.Max(1, (int)(cameraData.camera.pixelHeight * cameraData.renderScale));
+
                         // Handle ScaledScreenParams
                         Vector4 scaledScreenParams = Shader.GetGlobalVector(_ScaledScreenParams);
-                        scaledScreenParams.x = renderingData.cameraData.scaledWidth / (int)settings.downsampling;
-                        scaledScreenParams.y = renderingData.cameraData.scaledHeight / (int)settings.downsampling;
+                        scaledScreenParams.x = currentScaledWidth / (int)settings.downsampling;
+                        scaledScreenParams.y = currentScaledHeight / (int)settings.downsampling;
                         cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
                         cmd.DrawRendererList(rl);
-                        // Restore State
-                        scaledScreenParams.x = renderingData.cameraData.scaledWidth;
-                        scaledScreenParams.y = renderingData.cameraData.scaledHeight;
+
+                        // Restore Unscaled Screen State
+                        scaledScreenParams.x = currentScaledWidth;
+                        scaledScreenParams.y = currentScaledHeight;
                         cmd.SetGlobalVector(_ScaledScreenParams, scaledScreenParams);
                     }
                     else
@@ -140,21 +150,19 @@ namespace LowResolution
                         cmd.DrawRendererList(rl);
                     }
 
-
-                    if (isGameCamera && Enabled)
+                    //////////////////////////////////////////////////////////////////////////////
+                    // STAGE 2 : Composite lowres transparent buffer to the backbuffer.
+                    //////////////////////////////////////////////////////////////////////////////
+                    if (isSupportedCamera && Enabled)
                     {
-                        // Blit Low Resolution Buffer -> CameraColorAttachment
-                        // Blitter.BlitCameraTexture(cmd,
-                        //                           this.colorRT, renderingData.cameraData.renderer.cameraColorTargetHandle,
-                        //                           RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store,
-                        //                           this.blitMaterial, 0);
                         var dstColorRT = renderingData.cameraData.renderer.cameraColorTargetHandle;
-                        //var dstDepthRT = renderingData.cameraData.renderer.cameraDepthTargetHandle;
-                        //var viewportScale = this.colorRT.useScaling ? new Vector2(this.colorRT.rtHandleProperties.rtHandleScale.x, this.colorRT.rtHandleProperties.rtHandleScale.y) : Vector2.one;
-                        //cmd.SetRenderTarget(dstColorRT, dstDepthRT);
                         var viewportScale = Vector2.one;
                         cmd.SetRenderTarget(dstColorRT);
                         Blitter.BlitTexture(cmd, this.colorRT, viewportScale, this.blitMaterial, 0);
+
+                        // Restore render targets.
+                        cmd.SetRenderTarget(renderingData.cameraData.renderer.cameraColorTargetHandle,
+                                            renderingData.cameraData.renderer.cameraDepthTargetHandle);
                     }
                 }
 
@@ -165,7 +173,7 @@ namespace LowResolution
             public override void OnCameraCleanup(CommandBuffer cmd)
             {
                 if (cmd == null)
-                    throw new System.ArgumentNullException("cmd");
+                    throw new System.ArgumentNullException("LowResolutionRenderFeature.OnCameraCleanup() : No Commandbuffer provided, or null.");
                 this.colorRT = null;
                 this.depthRT = null;
             }
@@ -197,26 +205,33 @@ namespace LowResolution
             desc.width = desc.width / downSampling;
             desc.height = desc.height / downSampling;
             desc.graphicsFormat = GraphicsFormat.R16G16B16A16_SFloat;
-            
+
             var depthDesc = desc;
             depthDesc.msaaSamples = 1;// Depth-Only pass don't use MSAA
             depthDesc.graphicsFormat = GraphicsFormat.None; // DepthBufferとしてColorBufferにBindさせるにはR32ではダメ
-            RenderingUtils.ReAllocateIfNeeded(ref this.depthRTHandle, depthDesc, FilterMode.Point,
-                                              TextureWrapMode.Clamp, false, 1, 0, RENDER_TARGET_NAME);
+            RenderingUtils.ReAllocateHandleIfNeeded(ref this.depthRTHandle,
+                                                    depthDesc,
+                                                    FilterMode.Point,
+                                                    TextureWrapMode.Clamp,
+                                                    1, 0, RENDER_TARGET_NAME);
+
             // must set 0 to use as DepthBuffer
             // automatically set stencilFormat when set depthBufferBits
             desc.depthBufferBits = 0;
-            RenderingUtils.ReAllocateIfNeeded(ref this.colorRTHandle, desc, FilterMode.Bilinear, // BilinearだとDepthとのEdgeは綺麗だが全体的にボケが強い
-                                              TextureWrapMode.Clamp, false, 1, 0, RENDER_TARGET_NAME);
+            RenderingUtils.ReAllocateHandleIfNeeded(ref this.colorRTHandle,
+                                                    desc,
+                                                    FilterMode.Bilinear, // BilinearだとDepthとのEdgeは綺麗だが全体的にボケが強い
+                                                    TextureWrapMode.Clamp,
+                                                    1, 0, RENDER_TARGET_NAME);
 
             this.lowResolutionRenderPass.Setup(this.colorRTHandle, this.depthRTHandle);
         }
 
         protected override void Dispose(bool disposing)
         {
-            this.lowResolutionRenderPass.Dispose();
+            this.lowResolutionRenderPass?.Dispose();
             this.lowResolutionRenderPass = null;
-            
+
             this.colorRTHandle?.Release();
             this.depthRTHandle?.Release();
             this.colorRTHandle = this.depthRTHandle = null;
