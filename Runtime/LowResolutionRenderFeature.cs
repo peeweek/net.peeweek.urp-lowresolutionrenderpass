@@ -209,20 +209,39 @@ namespace LowResolution
             var depthDesc = desc;
             depthDesc.msaaSamples = 1;// Depth-Only pass don't use MSAA
             depthDesc.graphicsFormat = GraphicsFormat.None; // DepthBufferとしてColorBufferにBindさせるにはR32ではダメ
+
+
+#if UNITY_6000_0_OR_NEWER
             RenderingUtils.ReAllocateHandleIfNeeded(ref this.depthRTHandle,
                                                     depthDesc,
                                                     FilterMode.Point,
                                                     TextureWrapMode.Clamp,
                                                     1, 0, RENDER_TARGET_NAME);
+#else
+            RenderingUtils.ReAllocateIfNeeded(ref this.depthRTHandle,
+                                                    depthDesc,
+                                                    FilterMode.Point,
+                                                    TextureWrapMode.Clamp,
+                                                    false, 1, 0, RENDER_TARGET_NAME);
+#endif
 
             // must set 0 to use as DepthBuffer
             // automatically set stencilFormat when set depthBufferBits
             desc.depthBufferBits = 0;
+
+#if UNITY_6000_0_OR_NEWER            
             RenderingUtils.ReAllocateHandleIfNeeded(ref this.colorRTHandle,
                                                     desc,
                                                     FilterMode.Bilinear, // BilinearだとDepthとのEdgeは綺麗だが全体的にボケが強い
                                                     TextureWrapMode.Clamp,
                                                     1, 0, RENDER_TARGET_NAME);
+#else
+            RenderingUtils.ReAllocateIfNeeded(ref this.colorRTHandle,
+                                                    desc,
+                                                    FilterMode.Bilinear, // BilinearだとDepthとのEdgeは綺麗だが全体的にボケが強い
+                                                    TextureWrapMode.Clamp,
+                                                    false, 1, 0, RENDER_TARGET_NAME);
+#endif                                                    
 
             this.lowResolutionRenderPass.Setup(this.colorRTHandle, this.depthRTHandle);
         }
